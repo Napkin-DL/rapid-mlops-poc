@@ -1,0 +1,80 @@
+{
+  "StartAt": "Start Training Job",
+  "States": {
+    "Failed": {
+      "Type": "Fail"
+    },
+    "Start Training Job": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${region}:${account_id}:function:${function_name}",
+      "ResultPath": "$",
+      "Next": "Check Status Training"
+    },
+    "Check Status Training": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${region}:${account_id}:function:${function_name}",
+      "ResultPath": "$",
+      "Next": "Check Training Branch"
+    },
+    "Check Training Branch": {
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Or": [
+            {
+              "Variable": "$.status",
+              "StringEquals": "Completed"
+            }
+          ],
+          "Next": "Check Accuracy"
+        },
+        {
+          "Or": [
+            {
+              "Variable": "$.status",
+              "StringEquals": "InProgress"
+            }
+          ],
+          "Next": "Wait Status Training"
+        }
+      ]
+    },
+    "Wait Status Training": {
+      "Type": "Wait",
+      "Seconds": 30,
+      "Next": "Check Status Training"
+    },
+    "Check Accuracy": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${region}:${account_id}:function:${function_name}",
+      "ResultPath": "$",
+      "Next": "Accuracy above threshold?"
+    },
+    "Accuracy above threshold?": {
+      "Comment": "A Choice state checks accuracy",
+      "Type": "Choice",
+      "Choices": [
+        {
+          "Variable": "$.train_result",
+          "StringEquals": "PASS",
+          "Next": "Register Model"
+        },
+        {
+          "Variable": "$.train_result",
+          "StringEquals": "FAIL",
+          "Next": "Failed"
+        }
+      ],
+      "Default": "Failed"
+    },
+    "Register Model": {
+      "Type": "Task",
+      "Resource": "arn:aws:lambda:${region}:${account_id}:function:${function_name}",
+      "ResultPath": "$",
+      "Next": "End Deployment"
+    },
+    "End Deployment": {
+      "Type": "Succeed"
+    }
+  }
+}
