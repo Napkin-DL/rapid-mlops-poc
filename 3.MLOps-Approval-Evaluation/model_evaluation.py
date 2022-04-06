@@ -90,11 +90,11 @@ def lambda_handler(event, context):
         codecommit_repo = os.environ["codecommit_repo"]
 
         git_config = {'repo':  codecommit_repo, ## 'https://git-codecommit.ap-northeast-2.amazonaws.com/v1/repos/yolov5',
-                      'branch': 'master',
+                      'branch': 'main',
                       'username': secret['username'],
                       'password': secret['password']}        
         
-        source_dir = '1.SageMaker-Training-Processing/yolov5'
+        source_dir = 'yolov5'
 
 
         detect_processor = FrameworkProcessor(
