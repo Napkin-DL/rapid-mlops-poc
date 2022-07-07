@@ -1,4 +1,0 @@
-source: /opt/ml/model/valid/images
-imgsz: 640
-conf_thres: 0.25
-weights: exp/weights/best.pt
