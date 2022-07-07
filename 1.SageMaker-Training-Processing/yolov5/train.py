@@ -38,6 +38,9 @@ if str(ROOT) not in sys.path:
     sys.path.append(str(ROOT))  # add ROOT to PATH
 ROOT = Path(os.path.relpath(ROOT, Path.cwd()))  # relative
 
+## SageMaker ROOT
+ROOT = Path("/opt/ml/code")
+
 import val  # for end-of-epoch mAP
 from models.experimental import attempt_load
 from models.yolo import Model
@@ -57,9 +60,14 @@ from utils.metrics import fitness
 from utils.plots import plot_evolve, plot_labels
 from utils.torch_utils import EarlyStopping, ModelEMA, de_parallel, select_device, torch_distributed_zero_first
 
-LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
-RANK = int(os.getenv('RANK', -1))
-WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
+# LOCAL_RANK = int(os.getenv('LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
+# RANK = int(os.getenv('RANK', -1))
+# WORLD_SIZE = int(os.getenv('WORLD_SIZE', 1))
+
+# for SageMaker
+LOCAL_RANK = int(os.getenv('OMPI_COMM_WORLD_LOCAL_RANK', -1))  # https://pytorch.org/docs/stable/elastic/run.html
+RANK = int(os.getenv('OMPI_COMM_WORLD_RANK', -1))
+WORLD_SIZE = int(os.getenv('OMPI_COMM_WORLD_SIZE', 1))
 
 
 def train(hyp,  # path/to/hyp.yaml or hyp dictionary
@@ -532,14 +540,20 @@ def main(opt, callbacks=Callbacks()):
         assert torch.cuda.device_count() > LOCAL_RANK, 'insufficient CUDA devices for DDP command'
         torch.cuda.set_device(LOCAL_RANK)
         device = torch.device('cuda', LOCAL_RANK)
-        dist.init_process_group(backend="nccl" if dist.is_nccl_available() else "gloo")
+        # for SageMaker
+#         dist.init_process_group(backend="nccl" if dist.is_nccl_available() else "gloo")
+        dist.init_process_group(backend="nccl" if dist.is_nccl_available() else "gloo",
+                                rank=int(RANK),
+                                world_size=int(WORLD_SIZE)) 
 
     # Train
     if not opt.evolve:
         train(opt.hyp, opt, device, callbacks)
-        if WORLD_SIZE > 1 and RANK == 0:
-            LOGGER.info('Destroying process group... ')
-            dist.destroy_process_group()
+        
+        ## Remove codes for SageMaker
+#         if WORLD_SIZE > 1 and RANK == 0:
+#             LOGGER.info('Destroying process group... ')
+#             dist.destroy_process_group()
 
     # Evolve hyperparameters (optional)
     else:
@@ -637,7 +651,23 @@ def run(**kwargs):
     main(opt)
     return opt
 
+## Add function for SageMaker
+def check_sagemaker(opt):
+    import os
+    import json
+
+    if os.environ['SM_MODEL_DIR'] is not None:
+        opt.project = os.environ['SM_MODEL_DIR']
+        try:
+            opt.name = os.environ['SAGEMAKER_JOB_NAME']
+        except:
+            import datetime
+            opt.name = datetime.datetime.now().strftime("diffusion-%Y-%m-%d-%H-%M-%S-%f")
+            pass
+    return opt
+
 
 if __name__ == "__main__":
     opt = parse_opt()
+    opt = check_sagemaker(opt)
     main(opt)
